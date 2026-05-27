@@ -12,11 +12,12 @@ export default function Home() {
   const { data: session } = useSession();
   const { 
     gameState, startGame, pauseGame, resumeGame, 
-    adjustTime, endTurn, endSession 
+    adjustTime, endTurn, endSession, reorderPlayers 
   } = useSocket();
   const [newPlayerName, setNewPlayerName] = useState("");
-  const [initialTime, setInitialTime] = useState(600); // 10 minutes default
+  const [initialTimeMins, setInitialTimeMins] = useState(30); // 30 minutes default
   const [players, setPlayers] = useState<{ name: string; id: string }[]>([]);
+  const [customAdjustMins, setCustomAdjustMins] = useState(5); // 5 minutes default adjustment
 
   // Automatically add the logged-in user as a player if they exist
   useEffect(() => {
@@ -36,19 +37,25 @@ export default function Home() {
     setPlayers(players.filter(p => p.id !== id));
   };
 
-  const movePlayer = (index: number, direction: 'up' | 'down') => {
-    const newPlayers = [...players];
+  const movePlayerInList = (list: any[], index: number, direction: 'up' | 'down') => {
+    const newList = [...list];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex >= 0 && targetIndex < players.length) {
-      [newPlayers[index], newPlayers[targetIndex]] = [newPlayers[targetIndex], newPlayers[index]];
-      setPlayers(newPlayers);
+    if (targetIndex >= 0 && targetIndex < list.length) {
+      [newList[index], newList[targetIndex]] = [newList[targetIndex], newList[index]];
+      return newList;
     }
+    return list;
   };
 
   const handleStartGame = () => {
     if (players.length > 0) {
-      startGame(players.map(p => ({ ...p, initialTime })));
+      startGame(players.map(p => ({ ...p, initialTime: initialTimeMins * 60 })));
     }
+  };
+
+  const handleInGameReorder = (index: number, direction: 'up' | 'down') => {
+    const newPlayers = movePlayerInList(gameState.players, index, direction);
+    reorderPlayers(newPlayers);
   };
 
   // Helper to format time (handles negative)
@@ -85,13 +92,13 @@ export default function Home() {
         
         <div className="w-full max-w-md bg-slate-800 p-6 rounded-xl shadow-xl border border-slate-700">
           <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">Default Time (seconds)</label>
+            <label className="block text-sm font-medium mb-2">Default Time (minutes)</label>
             <div className="flex items-center gap-2">
               <Clock className="text-slate-400" size={20} />
               <input
                 type="number"
-                value={initialTime}
-                onChange={(e) => setInitialTime(parseInt(e.target.value))}
+                value={initialTimeMins}
+                onChange={(e) => setInitialTimeMins(parseInt(e.target.value) || 0)}
                 className="bg-slate-700 border border-slate-600 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -122,8 +129,8 @@ export default function Home() {
               <div key={p.id} className="flex justify-between items-center bg-slate-700 p-3 rounded border border-slate-600">
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col">
-                    <button onClick={() => movePlayer(idx, 'up')} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={16}/></button>
-                    <button onClick={() => movePlayer(idx, 'down')} disabled={idx === players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={16}/></button>
+                    <button onClick={() => setPlayers(movePlayerInList(players, idx, 'up'))} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={16}/></button>
+                    <button onClick={() => setPlayers(movePlayerInList(players, idx, 'down'))} disabled={idx === players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={16}/></button>
                   </div>
                   <Users size={18} className="text-slate-400" />
                   <span>{p.name}</span>
@@ -161,6 +168,16 @@ export default function Home() {
           )}
         </div>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-slate-700/50 px-3 py-1 rounded-lg border border-slate-600">
+            <span className="text-[10px] text-slate-400 uppercase font-bold">Adjust Step</span>
+            <input 
+              type="number" 
+              value={customAdjustMins} 
+              onChange={(e) => setCustomAdjustMins(parseInt(e.target.value) || 0)}
+              className="w-12 bg-transparent text-center text-sm font-bold focus:outline-none"
+            />
+            <span className="text-[10px] text-slate-400 uppercase font-bold">min</span>
+          </div>
           <button 
             onClick={endSession}
             className="text-xs text-red-400 hover:text-red-300 border border-red-400/30 px-3 py-1 rounded transition-colors"
@@ -192,17 +209,21 @@ export default function Home() {
                   : 'bg-slate-800 border-slate-700 opacity-60'
                 }`}
               >
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center gap-4">
+                  <div className="flex flex-col">
+                    <button onClick={() => handleInGameReorder(idx, 'up')} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={24}/></button>
+                    <button onClick={() => handleInGameReorder(idx, 'down')} disabled={idx === gameState.players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={24}/></button>
+                  </div>
+                  
                   <div className="flex-1">
                     <div className="text-sm font-medium text-slate-400 uppercase tracking-wider">Player {idx + 1}</div>
                     <div className="text-2xl font-bold">{p.name}</div>
-                    {isActive && (
-                      <div className="flex gap-2 mt-2">
-                        <button onClick={() => adjustTime(idx, 30)} className="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded">+30s</button>
-                        <button onClick={() => adjustTime(idx, -30)} className="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded">-30s</button>
-                      </div>
-                    )}
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={() => adjustTime(idx, customAdjustMins * 60)} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">+{customAdjustMins}m</button>
+                      <button onClick={() => adjustTime(idx, -customAdjustMins * 60)} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">-{customAdjustMins}m</button>
+                    </div>
                   </div>
+                  
                   <div className={`text-4xl font-mono font-bold ${isActive ? (isOvertime ? 'text-red-400' : 'text-blue-400') : 'text-slate-300'}`}>
                     {formatTime(p.remainingTime)}
                   </div>

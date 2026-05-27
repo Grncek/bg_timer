@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useSocket } from "@/hooks/useSocket";
-import { useSession, signOut, signIn } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { 
-  Play, SkipForward, Users, Clock, Plus, Trash2, LogOut, LogIn, 
-  Pause, ChevronUp, ChevronDown 
+  Play, SkipForward, Users, Clock, Plus, Trash2, LogOut, 
+  Pause, ChevronUp, ChevronDown, GripVertical 
 } from "lucide-react";
 
 export default function Home() {
@@ -15,9 +15,10 @@ export default function Home() {
     adjustTime, endTurn, endSession, reorderPlayers 
   } = useSocket();
   const [newPlayerName, setNewPlayerName] = useState("");
-  const [initialTimeMins, setInitialTimeMins] = useState(30); // 30 minutes default
+  const [initialTimeMins, setInitialTimeMins] = useState<number | "">(30);
   const [players, setPlayers] = useState<{ name: string; id: string }[]>([]);
-  const [customAdjustMins, setCustomAdjustMins] = useState(5); // 5 minutes default adjustment
+  const [customAdjustMins, setCustomAdjustMins] = useState(5);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // Automatically add the logged-in user as a player if they exist
   useEffect(() => {
@@ -37,25 +38,49 @@ export default function Home() {
     setPlayers(players.filter(p => p.id !== id));
   };
 
-  const movePlayerInList = (list: any[], index: number, direction: 'up' | 'down') => {
+  const movePlayerInList = (list: any[], fromIndex: number, toIndex: number) => {
     const newList = [...list];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex >= 0 && targetIndex < list.length) {
-      [newList[index], newList[targetIndex]] = [newList[targetIndex], newList[index]];
-      return newList;
+    const [movedItem] = newList.splice(fromIndex, 1);
+    newList.splice(toIndex, 0, movedItem);
+    return newList;
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number, isSetup: boolean) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+    if (isSetup) {
+      setPlayers(movePlayerInList(players, draggedIndex, targetIndex));
+    } else {
+      const newPlayers = movePlayerInList(gameState.players, draggedIndex, targetIndex);
+      reorderPlayers(newPlayers);
     }
-    return list;
+    setDraggedIndex(null);
   };
 
   const handleStartGame = () => {
     if (players.length > 0) {
-      startGame(players.map(p => ({ ...p, initialTime: initialTimeMins * 60 })));
+      const timeInSeconds = (typeof initialTimeMins === 'number' ? initialTimeMins : 0) * 60;
+      startGame(players.map(p => ({ ...p, initialTime: timeInSeconds })));
     }
   };
 
   const handleInGameReorder = (index: number, direction: 'up' | 'down') => {
-    const newPlayers = movePlayerInList(gameState.players, index, direction);
-    reorderPlayers(newPlayers);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < gameState.players.length) {
+      const newPlayers = movePlayerInList(gameState.players, index, targetIndex);
+      reorderPlayers(newPlayers);
+    }
   };
 
   // Helper to format time (handles negative)
@@ -72,21 +97,14 @@ export default function Home() {
       <main className="min-h-screen bg-slate-900 text-white p-6 flex flex-col items-center">
         <h1 className="text-4xl font-bold mb-8 text-blue-400">Board Game Timer</h1>
 
-        <div className="w-full max-w-md flex justify-end mb-4">
-          {session ? (
+        <div className="w-full max-w-md flex justify-end mb-4 h-10">
+          {session && (
             <div className="flex items-center gap-3 bg-slate-800 px-4 py-2 rounded-full border border-slate-700">
               <span className="text-sm text-slate-300">Hello, <span className="text-blue-400 font-semibold">{session.user?.name}</span></span>
               <button onClick={() => signOut()} className="text-slate-500 hover:text-red-400 transition-colors">
                 <LogOut size={18} />
               </button>
             </div>
-          ) : (
-            <button 
-              onClick={() => signIn()} 
-              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-full border border-slate-700 transition-colors text-sm"
-            >
-              <LogIn size={18} /> Sign In
-            </button>
           )}
         </div>
         
@@ -98,8 +116,9 @@ export default function Home() {
               <input
                 type="number"
                 value={initialTimeMins}
-                onChange={(e) => setInitialTimeMins(parseInt(e.target.value) || 0)}
+                onChange={(e) => setInitialTimeMins(e.target.value === "" ? "" : parseInt(e.target.value))}
                 className="bg-slate-700 border border-slate-600 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Minutes..."
               />
             </div>
           </div>
@@ -126,18 +145,28 @@ export default function Home() {
 
           <div className="space-y-2 mb-8">
             {players.map((p, idx) => (
-              <div key={p.id} className="flex justify-between items-center bg-slate-700 p-3 rounded border border-slate-600">
+              <div 
+                key={p.id} 
+                draggable
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, idx, true)}
+                className={`flex justify-between items-center bg-slate-700 p-3 rounded border border-slate-600 cursor-grab active:cursor-grabbing transition-opacity ${draggedIndex === idx ? 'opacity-40' : 'opacity-100'}`}
+              >
                 <div className="flex items-center gap-2">
-                  <div className="flex flex-col">
-                    <button onClick={() => setPlayers(movePlayerInList(players, idx, 'up'))} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={16}/></button>
-                    <button onClick={() => setPlayers(movePlayerInList(players, idx, 'down'))} disabled={idx === players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={16}/></button>
-                  </div>
+                  <GripVertical size={18} className="text-slate-500" />
                   <Users size={18} className="text-slate-400" />
                   <span>{p.name}</span>
                 </div>
-                <button onClick={() => removePlayer(p.id)} className="text-red-400 hover:text-red-300">
-                  <Trash2 size={18} />
-                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col">
+                    <button onClick={() => setPlayers(movePlayerInList(players, idx, Math.max(0, idx - 1)))} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={14}/></button>
+                    <button onClick={() => setPlayers(movePlayerInList(players, idx, Math.min(players.length - 1, idx + 1)))} disabled={idx === players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={14}/></button>
+                  </div>
+                  <button onClick={() => removePlayer(p.id)} className="text-red-400 hover:text-red-300">
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -203,16 +232,25 @@ export default function Home() {
             return (
               <div 
                 key={idx}
-                className={`p-6 rounded-2xl border-2 transition-all duration-300 ${
+                draggable
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, idx, false)}
+                className={`p-6 rounded-2xl border-2 transition-all duration-300 cursor-grab active:cursor-grabbing ${
+                  draggedIndex === idx ? 'opacity-40' : 'opacity-100'
+                } ${
                   isActive 
                   ? isOvertime ? 'bg-red-900/40 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 'bg-blue-900/40 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.3)] scale-105' 
                   : 'bg-slate-800 border-slate-700 opacity-60'
                 }`}
               >
                 <div className="flex justify-between items-center gap-4">
-                  <div className="flex flex-col">
-                    <button onClick={() => handleInGameReorder(idx, 'up')} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={24}/></button>
-                    <button onClick={() => handleInGameReorder(idx, 'down')} disabled={idx === gameState.players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={24}/></button>
+                  <div className="flex items-center gap-3">
+                    <GripVertical size={24} className="text-slate-600" />
+                    <div className="flex flex-col">
+                      <button onClick={() => handleInGameReorder(idx, 'up')} disabled={idx === 0} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronUp size={20}/></button>
+                      <button onClick={() => handleInGameReorder(idx, 'down')} disabled={idx === gameState.players.length - 1} className="text-slate-500 hover:text-white disabled:opacity-0"><ChevronDown size={20}/></button>
+                    </div>
                   </div>
                   
                   <div className="flex-1">

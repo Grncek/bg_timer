@@ -21,11 +21,10 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/server.ts ./server.ts
 COPY --from=builder /app/src ./src
-
-# Install ts-node and typescript to run the server.ts
-RUN npm install -g ts-node typescript
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+# Run the project using the production start script
+CMD ["npm", "start"]
 

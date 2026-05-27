@@ -2,13 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useSocket } from "@/hooks/useSocket";
-import { Play, SkipForward, Users, Clock, Plus, Trash2 } from "lucide-react";
+import { useSession, signOut, signIn } from "next-auth/react";
+import { Play, SkipForward, Users, Clock, Plus, Trash2, LogOut, LogIn } from "lucide-react";
 
 export default function Home() {
+  const { data: session } = useSession();
   const { gameState, startGame, endTurn } = useSocket();
   const [newPlayerName, setNewPlayerName] = useState("");
   const [initialTime, setInitialTime] = useState(600); // 10 minutes default
   const [players, setPlayers] = useState<{ name: string; id: string }[]>([]);
+
+  // Automatically add the logged-in user as a player if they exist
+  useEffect(() => {
+    if (session?.user?.name && players.length === 0) {
+      setPlayers([{ name: session.user.name, id: "session-user" }]);
+    }
+  }, [session]);
 
   const addPlayer = () => {
     if (newPlayerName.trim()) {
@@ -38,6 +47,24 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-slate-900 text-white p-6 flex flex-col items-center">
         <h1 className="text-4xl font-bold mb-8 text-blue-400">Board Game Timer</h1>
+
+        <div className="w-full max-w-md flex justify-end mb-4">
+          {session ? (
+            <div className="flex items-center gap-3 bg-slate-800 px-4 py-2 rounded-full border border-slate-700">
+              <span className="text-sm text-slate-300">Hello, <span className="text-blue-400 font-semibold">{session.user?.name}</span></span>
+              <button onClick={() => signOut()} className="text-slate-500 hover:text-red-400 transition-colors">
+                <LogOut size={18} />
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => signIn()} 
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-full border border-slate-700 transition-colors text-sm"
+            >
+              <LogIn size={18} /> Sign In
+            </button>
+          )}
+        </div>
         
         <div className="w-full max-w-md bg-slate-800 p-6 rounded-xl shadow-xl border border-slate-700">
           <div className="mb-6">
@@ -105,7 +132,17 @@ export default function Home() {
     <main className="min-h-screen bg-slate-900 text-white flex flex-col">
       <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
         <h2 className="text-xl font-bold">Game in Progress</h2>
-        <div className="text-slate-400 text-sm">Room: Global</div>
+        <div className="flex items-center gap-4">
+          {session && (
+            <div className="flex items-center gap-2 text-sm text-slate-400 border-r border-slate-700 pr-4 mr-2">
+              <span>{session.user?.name}</span>
+              <button onClick={() => signOut()} title="Sign Out">
+                <LogOut size={16} className="hover:text-red-400 transition-colors" />
+              </button>
+            </div>
+          )}
+          <div className="text-slate-400 text-sm">Room: Global</div>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">

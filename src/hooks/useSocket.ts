@@ -29,9 +29,29 @@ export const useSocket = () => {
     socket?.emit("start-game", players);
   };
 
+  const pauseGame = () => {
+    socket?.emit("pause-game");
+  };
+
+  const resumeGame = () => {
+    socket?.emit("resume-game");
+  };
+
+  const adjustTime = (playerIndex: number, amount: number) => {
+    socket?.emit("adjust-time", { playerIndex, amount });
+  };
+
   const endTurn = () => {
     socket?.emit("end-turn");
   };
 
-  return { socket, gameState, startGame, endTurn };
+  const endSession = () => {
+    socket?.emit("end-session");
+  };
+
+  const reorderPlayers = (newPlayers: any[]) => {
+    socket?.emit("reorder-players", newPlayers);
+  };
+
+  return { socket, gameState, startGame, pauseGame, resumeGame, adjustTime, endTurn, endSession, reorderPlayers };
 };
